@@ -132,7 +132,7 @@ sequenceDiagram
     A->>D: SELECT user WHERE email = ?
     D-->>A: {id, password_hash}
     A->>A: bcrypt.compare(password, hash)
-    A-->>U: Set-Cookie: jwt=<token>; HttpOnly; SameSite=Strict
+    A-->>U: Set-Cookie: jwt={token}; HttpOnly; SameSite=Strict
     U->>A: GET /photos?bbox=... (cookie auto-sent)
     A->>A: verifyJWT middleware
     A-->>U: 200 GeoJSON FeatureCollection
