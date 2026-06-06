@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
-import { X, MapPin, Mountain, Clock, Cpu } from 'lucide-react'
-import type { SelectedPhoto } from '../types/photo'
+import { useEffect, useRef, useState } from 'react'
+import { X, MapPin, Mountain, Clock, Cpu, MessageSquare, Send } from 'lucide-react'
+import type { SelectedPhoto, Comment } from '../types/photo'
 
 interface PhotoSidebarProps {
   photo: SelectedPhoto
@@ -16,14 +16,20 @@ const AI_STATUS: Record<string, { label: string; className: string }> = {
 export default function PhotoSidebar({ photo, onClose }: PhotoSidebarProps) {
   const [aiStatus, setAiStatus] = useState(photo.ai_status)
   const [aiDescription, setAiDescription] = useState(photo.ai_description)
+  const [comments, setComments] = useState<Comment[]>([])
+  const [commentBody, setCommentBody] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
   // Reset when a different photo is selected
   useEffect(() => {
     setAiStatus(photo.ai_status)
     setAiDescription(photo.ai_description)
+    setComments([])
+    setCommentBody('')
   }, [photo.id])
 
-  // Poll every 5s while pending
+  // Poll every 5s while AI is pending
   useEffect(() => {
     if (aiStatus !== 'pending') return
     const interval = setInterval(async () => {
@@ -37,6 +43,34 @@ export default function PhotoSidebar({ photo, onClose }: PhotoSidebarProps) {
     }, 5000)
     return () => clearInterval(interval)
   }, [photo.id, aiStatus])
+
+  // Fetch comments on mount + when photo changes
+  useEffect(() => {
+    fetch(`/api/photos/${photo.id}/comments`, { credentials: 'include' })
+      .then((r) => r.json())
+      .then((data) => Array.isArray(data) && setComments(data))
+      .catch(() => {})
+  }, [photo.id])
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    if (!commentBody.trim() || submitting) return
+    setSubmitting(true)
+    try {
+      const res = await fetch(`/api/photos/${photo.id}/comments`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: commentBody.trim() }),
+      })
+      if (!res.ok) return
+      const newComment = await res.json()
+      setComments((prev) => [...prev, newComment])
+      setCommentBody('')
+      setTimeout(() => bottomRef.current?.scrollIntoView({ behavior: 'smooth' }), 50)
+    } catch {}
+    finally { setSubmitting(false) }
+  }
 
   const status = AI_STATUS[aiStatus] ?? AI_STATUS.pending
 
@@ -78,19 +112,18 @@ export default function PhotoSidebar({ photo, onClose }: PhotoSidebarProps) {
         </span>
       </div>
 
-      {/* Metadata */}
+      {/* Scrollable content */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {/* Metadata */}
         <div className="space-y-2.5">
           <MetaRow icon={<MapPin size={14} />} label="Coordinates">
             {photo.lat.toFixed(5)}°N, {photo.lng.toFixed(5)}°E
           </MetaRow>
-
           {photo.altitude != null && (
             <MetaRow icon={<Mountain size={14} />} label="Altitude">
               {Math.round(photo.altitude)} m
             </MetaRow>
           )}
-
           {takenAt && (
             <MetaRow icon={<Clock size={14} />} label="Captured">
               {takenAt}
@@ -111,6 +144,60 @@ export default function PhotoSidebar({ photo, onClose }: PhotoSidebarProps) {
               {aiStatus === 'pending' ? 'Generating description…' : 'No description available'}
             </p>
           )}
+        </div>
+
+        {/* Comments */}
+        <div className="pt-2 border-t border-gray-800">
+          <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-3">
+            <MessageSquare size={13} />
+            <span className="uppercase tracking-wider">
+              Comments {comments.length > 0 && `· ${comments.length}`}
+            </span>
+          </div>
+
+          {/* Comment list */}
+          <div className="space-y-3 mb-3">
+            {comments.length === 0 && (
+              <p className="text-xs text-gray-600 italic">No comments yet.</p>
+            )}
+            {comments.map((c) => (
+              <div key={c.id} className="bg-gray-900 rounded-lg px-3 py-2">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-blue-400 font-medium truncate max-w-[70%]">
+                    {c.email}
+                  </span>
+                  <span className="text-[10px] text-gray-600">
+                    {new Date(c.created_at).toLocaleString('fr-FR', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-300">{c.body}</p>
+              </div>
+            ))}
+            <div ref={bottomRef} />
+          </div>
+
+          {/* Comment form */}
+          <form onSubmit={handleSubmit} className="flex gap-2">
+            <input
+              type="text"
+              value={commentBody}
+              onChange={(e) => setCommentBody(e.target.value)}
+              placeholder="Add a comment…"
+              className="flex-1 bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-sm text-gray-200 placeholder-gray-600 focus:outline-none focus:border-blue-600 transition-colors"
+            />
+            <button
+              type="submit"
+              disabled={!commentBody.trim() || submitting}
+              className="p-2 rounded-lg bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+            >
+              <Send size={14} className="text-white" />
+            </button>
+          </form>
         </div>
       </div>
     </div>

@@ -100,6 +100,43 @@ router.get('/:id', requireAuth, async (req: AuthRequest, res: Response) => {
   }
 })
 
+router.get('/:id/comments', requireAuth, async (req: AuthRequest, res: Response) => {
+  try {
+    const result = await pool.query(
+      `SELECT c.id, c.body, c.created_at, u.email
+       FROM comments c
+       JOIN users u ON u.id = c.user_id
+       WHERE c.photo_id = $1
+       ORDER BY c.created_at ASC`,
+      [req.params.id],
+    )
+    res.json(result.rows)
+  } catch (err) {
+    console.error('Comments fetch error:', err)
+    res.status(500).json({ error: 'Failed to fetch comments' })
+  }
+})
+
+router.post('/:id/comments', requireAuth, async (req: AuthRequest, res: Response) => {
+  const { body } = req.body
+  if (!body || typeof body !== 'string' || !body.trim()) {
+    res.status(400).json({ error: 'Comment body is required' })
+    return
+  }
+  try {
+    const result = await pool.query(
+      `INSERT INTO comments (photo_id, user_id, body)
+       VALUES ($1, $2, $3)
+       RETURNING id, body, created_at`,
+      [req.params.id, req.userId, body.trim()],
+    )
+    res.status(201).json(result.rows[0])
+  } catch (err) {
+    console.error('Comment insert error:', err)
+    res.status(500).json({ error: 'Failed to post comment' })
+  }
+})
+
 router.get('/', requireAuth, async (req: AuthRequest, res: Response) => {
   try {
     const { bbox } = req.query

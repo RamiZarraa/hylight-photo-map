@@ -115,7 +115,8 @@ erDiagram
 | `POST` | `/api/auth/logout` | — | Clear cookie. |
 | `POST` | `/api/photos` | JWT | Multipart upload → EXIF parse → Cloudinary → DB row → fire AI. |
 | `GET` | `/api/photos?bbox=w,s,e,n` | JWT | Photos within map viewport, returned as GeoJSON FeatureCollection. |
-| `GET` | `/api/photos/:id` | JWT | Full detail + comments + AI description. |
+| `GET` | `/api/photos/:id` | JWT | AI status + description (polled by sidebar while `pending`). |
+| `GET` | `/api/photos/:id/comments` | JWT | List comments for a photo (id, body, email, created_at). |
 | `POST` | `/api/photos/:id/comments` | JWT | Add a comment. |
 
 `GET /api/photos` returns a **GeoJSON FeatureCollection** so MapLibre consumes it as a source directly with no client-side reshaping.
@@ -208,7 +209,7 @@ flowchart TB
 - `ollama` pre-pulls `llava` into a named volume so restarts don't re-download the 4+ GB model.
 - `api` has a `depends_on` healthcheck on `db` so it won't start before Postgres is ready.
 - Secrets (JWT secret, Cloudinary API key/secret, DB password) come from `.env` via Compose `env_file`. `.env.example` is committed; `.env` is gitignored.
-- The Vite build is baked into a `web` nginx image at build time (`RUN npm run build`), served as static files. Nginx also reverse-proxies `/api/*` to the Express container — no CORS config needed.
+- The Vite build is baked into a `web` nginx image at build time (`RUN npm run build`), served as static files. Nginx also reverse-proxies `/api/*` to the Express container — no CORS config needed. **MVP note:** the current dev setup uses the Vite dev server directly on `:5173` with a proxy to the API; nginx is the production step.
 
 **Production lift path:** the same Compose graph runs on a single VM. Swap Cloudinary for S3/R2, put nginx behind Certbot for TLS, and promote the AI fire-and-forget into a worker service with a queue (e.g. BullMQ + Redis) — the rest of the architecture is unchanged.
 

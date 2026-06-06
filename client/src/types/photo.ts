@@ -12,3 +12,10 @@ export interface SelectedPhoto extends PhotoProperties {
   lng: number
   lat: number
 }
+
+export interface Comment {
+  id: string
+  body: string
+  created_at: string
+  email: string
+}
